@@ -18,6 +18,7 @@ public:
    * @param str
    */
   void insert(const std::string &str);
+  
   /**
    * Remove specified string
    * @param str
@@ -55,11 +56,16 @@ public:
   /**
    * @return Number of strings in container
    */
-  size_t size() const;
+  inline size_t size() const {
+      return size_;
+  }
+  
   /**
    * @return true if container is empty :)
    */
-  bool empty() const;
+  inline bool empty() const {
+      return size_ == 0;
+  }
 
   /**
    * Exchange content of this and other
@@ -68,5 +74,11 @@ public:
   void swap(trie_t &other);
 
 private:
-
+  size_t size_;
+  size_t string_end_count;
+  
+  std::map<char, trie_t> children;
+  
+  const trie_t* reach(const std::string &str) const;
 };
+
