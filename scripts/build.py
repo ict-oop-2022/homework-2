@@ -8,7 +8,7 @@ init()
 
 parser = argparse.ArgumentParser(description='Build')
 parser.add_argument('--config', '-c', default='Debug', choi>
-parser.add_argument('--drop-build', '-d', action='store_tru>
+parser.add_argument('--drop-build', '-d', action='store_tru)
 
 args = parser.parse_args()
 config = args.config
