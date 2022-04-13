@@ -1,119 +1,158 @@
 #include "trie.h"
+#include <queue>
+#include <algorithm>
+#include <cassert>
+#include <utility>
 
-trie_t::trie_t() = default;
-
-trie_t::~trie_t() = default;
-trie_t::trie_t(const trie_t &other) = default;
-trie_t &trie_t::operator=(const trie_t &other) = default;
-
-void trie_t::insert(const std::string &str) {
-    ++subtree_count;
-    if (str.length() == 0) {
-        // в случае если строка кончилась
-        ++cell_count;
-        return;
-    }
-    // рекурсивно вызываем функцию
-    next_layer[str[0]].insert(str.substr(1));
+trie_t::trie_t()
+        : size_(0)
+        , string_end_count(0)
+{
 }
 
-bool trie_t::erase(const std::string &str) {
-    if (str.length() == 0) {
-        // в случае если строка кончилась
-        if (cell_count > 0) {
-            --subtree_count;
-            --cell_count;
-            return true;
-        } else {
+trie_t::~trie_t()
+{
+}
+
+trie_t::trie_t(const trie_t &other)
+        : size_(other.size_)
+        , string_end_count(other.string_end_count)
+        , children(other.children)
+{
+}
+
+trie_t& trie_t::operator=(const trie_t& other)
+{
+    size_ = other.size_;
+    string_end_count = other.string_end_count;
+    children = other.children;
+    return *this;
+}
+
+void trie_t::insert(const std::string &str)
+{
+    trie_t *root = this;
+    for (char ch: str) {
+        ++root->size_;
+        auto it = root->children.find(ch);
+        if (it == root->children.end()) {
+            it = root->children.insert({ch, trie_t()}).first;
+        }
+        root = &it->second;
+    }
+    ++root->size_;
+    ++root->string_end_count;
+}
+
+void trie_t::clear()
+{
+    children.clear();
+    size_ = 0;
+    string_end_count = 0;
+}
+
+bool trie_t::erase(const std::string &str)
+{
+    std::vector<trie_t*> path;
+    path.push_back(this);
+    for (char ch: str) {
+        auto it = path.back()->children.find(ch);
+        if (it == path.back()->children.end()) {
             return false;
         }
+        path.push_back(&it->second);
     }
-    if (next_layer.find(str[0]) == next_layer.end()) {
-        // проверяем что в следующем слое есть нужная буква
+    if (!path.back()->string_end_count) {
         return false;
     }
-    if (next_layer[str[0]].erase(str.substr(1))) { // рекурсивно вызываем функцию
-        --subtree_count;
-        return true;
+    --path.back()->string_end_count;
+    --path.back()->size_;
+    path.pop_back();
+    for (; !path.empty(); path.pop_back()) {
+        --path.back()->size_;
+        char ch = str[path.size() - 1];
+        auto it = path.back()->children.find(ch);
+        if (it->second.size_ == 0) {
+            path.back()->children.erase(it);
+        }
     }
-    return false;
+    return true;
 }
 
-void trie_t::clear() {
-    next_layer.clear();
-    cell_count = 0;
-    subtree_count = 0;
-}
-
-bool trie_t::find(const std::string &str) const {
-    if (str.length() == 0) {
-        // в случае если строка кончилась
-        return true;
-    }
-    if (next_layer.find(str[0]) == next_layer.end()) {
-        // проверяем что в следующем слое есть нужная буква
-        return false;
-    }
-    // рекурсивно вызываем функцию
-    return next_layer.at(str[0]).find(str.substr(1));
+bool trie_t::find(const std::string &str) const
+{
+    auto current_root = reach(str);
+    return current_root && current_root->string_end_count > 0;
 }
 
 size_t trie_t::count_with_prefix(const std::string &prefix) const {
-    if (prefix.length() == 0) {
-        // в случае если строка кончилась
-        return subtree_count;
-    }
-    if (next_layer.find(prefix[0]) == next_layer.end()) {
-        // проверяем что в следующем слое есть нужная буква
+    auto current_root = reach(prefix);
+    if (!current_root) {
         return 0;
     }
-    // рекурсивно вызываем функцию
-    return next_layer.at(prefix[0]).count_with_prefix(prefix.substr(1));
+    return current_root->size_;
 }
 
-std::string trie_t::operator[](size_t index) const {
-    if (index < cell_count) {
-        // если мы остановились в нужной ячейке
-        return "";
-    }
-    index -= cell_count; // вычитаем количество строк в текущей ячейке
-    for (const auto &cell : next_layer) {
-        if (index < cell.second.subtree_count) {
-            // если мы остановились в нужной ветке
-            return cell.first + cell.second[index]; // рекурсивно вызываем функцию
-        } else {
-            // пропускаем ветки не содержащие нужную строку
-            index -= cell.second.subtree_count; // вычитаем количество строк в дочерних ветках
+std::string trie_t::operator[](size_t index) const
+{
+    assert(index < size_);
+    std::string res;
+    const trie_t* root = this;
+    while (root) {
+        if (index < root->string_end_count) {
+            break;
+        }
+        index -= root->string_end_count;
+        auto temp = root;
+        root = nullptr;
+        for (const auto& [ch, next_root]: temp->children) {
+            if (index < next_root.size_) {
+                res += ch;
+                root = &next_root;
+                break;
+            }
+            index -= next_root.size_;
         }
     }
+
+    return res;
 }
 
-std::vector<std::string> trie_t::to_vector() const {
-    std::vector<std::string> string_vector{};
-    for (int i = 0; i < cell_count; ++i) {
-        // добавляем пустые строки
-        string_vector.push_back("");
-    }
-    for (const auto &cell : next_layer) {
-        // рекурсивно добавляем вектора из дочерних веток
-        std::vector<std::string> subtree_vector = cell.second.to_vector();
-        for (std::string &str : subtree_vector) {
-            str = cell.first + str; // добавляем букву ко всем строкам
+std::vector<std::string> trie_t::to_vector() const
+{
+    // who need dfs when we can bfs
+    std::queue<std::pair<const trie_t&, size_t>> qu;
+    std::vector<std::string> res(size_);
+
+    for (qu.emplace(*this, 0); !qu.empty(); qu.pop()) {
+        auto [cur_root, start_id] = qu.front();
+        start_id += cur_root.string_end_count;
+        for (const auto& [ch, next_root]: cur_root.children) {
+            qu.emplace(next_root, start_id);
+            for (int i = 0; i < next_root.size_; ++i) {
+                res[start_id++] += ch;
+            }
         }
-        string_vector.insert(string_vector.end(), subtree_vector.begin(),
-                             subtree_vector.end()); // добавляем элементы в конец
     }
-    return string_vector;
-}
 
-size_t trie_t::size() const {
-    return subtree_count;
-}
-
-bool trie_t::empty() const {
-    return subtree_count == 0;
+    return res;
 }
 
 void trie_t::swap(trie_t &other) {
-    std::swap(*this, other);
+    std::swap(size_, other.size_);
+    std::swap(string_end_count, other.string_end_count);
+    std::swap(children, other.children);
+}
+
+const trie_t* trie_t::reach(const std::string& str) const
+{
+    const trie_t* root = this;
+    for (char ch: str) {
+        auto it = root->children.find(ch);
+        if (it == root->children.end()) {
+            return nullptr;
+        }
+        root = &it->second;
+    }
+    return root;
 }
